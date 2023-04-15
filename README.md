@@ -8,7 +8,7 @@ Although the inverter only delivers a angular-website, access is only possible v
 You can't also access the inverter by app through a vpn-connection. 
 
 ## Requirements
-Apache with PHP7+ (mod_rewrite & curl required)
+Apache with PHP7+ (mod_rewrite, curl & https required) 
 (ex. raspberry pi, synology nas ...)
 
 ## How it works

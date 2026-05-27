@@ -27,10 +27,12 @@ function DoJsonRequest($url, $data, $reqtype = 'POST', $returnEncodedJson = fals
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);	
 	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $reqtype);	
 	curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-	curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type:application/json'));
+	curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type:application/json', 'Expect:')); // disable 100-continue stall
 	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Skip SSL Verification
 	curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); // Skip SSL Verification
-	$response = curl_exec($ch);		
+	curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+	curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+	$response = curl_exec($ch);
 	$error_message = curl_error($ch);  
 	if(!empty($error_message)) die("error: ".$error_message);
 	
@@ -50,19 +52,36 @@ function DoGetRequest($url)
 	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');	
 	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Skip SSL Verification
 	curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); // Skip SSL Verification
-	$response = curl_exec($ch);	
-	$error_message = curl_error($ch);  		
+	curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+	curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+	$response = curl_exec($ch);
+	$error_message = curl_error($ch);
 	if(!empty($error_message)) die("error: ".$error_message);
 	$header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
 	$header = substr($response, 0, $header_size);
 	$body = substr($response, $header_size);
 	curl_close($ch);	
 	foreach(preg_split("/((\r?\n)|(\r\n?))/", $header) as $line){
+		if($line === '') continue;
+		$lower = strtolower($line);
+		// skip transport/length headers: we modify the body below, so the device's
+		// Content-Length no longer matches, and curl already de-chunked the body.
+		if(startsWith($lower, 'content-length')) continue;
+		if(startsWith($lower, 'transfer-encoding')) continue;
+		if(startsWith($lower, 'connection')) continue;
 		header($line);
-	} 	
+	}
 	//$body = str_replace('"/v1/', '"../v1/', $body); //replace absolute with rel path	
 	
-	//manipulate html for some modifications 
+	//manipulate html for some modifications
+	if(strpos($url, "statusConnection.html") !== false)
+	{
+		// page assumes it is reached by IP (e.g. 192.168.0.80) and reads host_Data[2]/[3].
+		// Through the proxy the host is a domain -> fewer parts ->
+		// host_Data[3] is undefined and .trim() throws. Guard with || "".
+		$body = str_replace('host_Data[2].trim() != "23" &&  host_Data[3].trim() != "1"',
+			'(host_Data[2]||"").trim() != "23" &&  (host_Data[3]||"").trim() != "1"', $body);
+	}
 	if(strpos($url, "system/index.html") !== false)
 	{		
 		$body = str_replace(".toFixed(1)", ".toFixed(2)", $body); 
